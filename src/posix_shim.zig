@@ -701,7 +701,9 @@ pub const ClockGetTimeError = error{ UnsupportedClock, Unexpected };
 pub fn clock_gettime(clock_id: posix.clockid_t) ClockGetTimeError!posix.timespec {
     var ts: posix.timespec = undefined;
     const e = switch (native_os) {
-        .linux => errno(linux.clock_gettime(@intFromEnum(clock_id), &ts)),
+        // linux.clock_gettime takes `clockid_t` (an enum), not a u32 —
+        // passing @intFromEnum here was a Zig-version-skew pre-0.16.
+        .linux => errno(linux.clock_gettime(clock_id, &ts)),
         else => blk: {
             const rc = c.clock_gettime(clock_id, &ts);
             if (rc == 0) return ts;
