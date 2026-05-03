@@ -52,7 +52,10 @@ pub const Pool = struct {
         }
 
         return .{
-            .mutex = if (comptime blockingMode()) .{} else {},
+            // Zig 0.16 std.Io.Mutex is an `extern struct` with a `state`
+            // atomic that must be explicitly initialized — `.{}` compiles
+            // only when `M == void`. Use `Mutex.init` in blocking mode.
+            .mutex = if (comptime blockingMode()) Mutex.init else {},
             .buffers = buffers,
             .available = count,
             .allocator = allocator,

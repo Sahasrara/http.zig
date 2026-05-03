@@ -18,6 +18,12 @@ pub const Response = response.Response;
 /// Public alias for the 0.16-compat socket-fd wrapper used in SSE handler
 /// signatures: `fn startEventStream(ctx, fn(T, httpz.Stream) void)`.
 pub const Stream = posix_shim.Stream;
+pub const Address = posix_shim.Address;
+/// TCP connect helpers — re-exported so consumer apps (e.g. ByteMutual's
+/// SMTP client) can open outbound TCP without a direct dep on our internal
+/// posix_shim. Mirrors the 0.15 `std.net.tcpConnectTo*` shape.
+pub const tcpConnectToHost = posix_shim.tcpConnectToHost;
+pub const tcpConnectToAddress = posix_shim.tcpConnectToAddress;
 pub const Url = @import("url.zig").Url;
 pub const Config = @import("config.zig").Config;
 
@@ -739,9 +745,17 @@ const FallbackAllocator = struct {
     fn resize(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize) bool {
         const self: *FallbackAllocator = @ptrCast(@alignCast(ctx));
         if (self.fba.ownsPtr(buf.ptr)) {
-            if (self.fixed.rawResize(buf, alignment, new_len, ra)) {
-                return true;
-            }
+            // The buffer lives in the FBA. Only try to resize in-place
+            // there; if the FBA can't accommodate the new size, return
+            // false so the caller will alloc+copy. Forwarding to the
+            // fallback arena here is unsound — the arena does not own
+            // this buffer, and stdlib's `ArenaAllocator.resize` asserts
+            // `memory.len > 0` / unwraps `loadFirstNode().?`, both of
+            // which can panic on a zero-length sentinel slice or a
+            // fresh (never-allocated-from) arena. Let the caller pick
+            // up the slack via `alloc + @memcpy + free`, which is how
+            // ArrayList handles `remap() == null`.
+            return self.fixed.rawResize(buf, alignment, new_len, ra);
         }
         return self.fallback.rawResize(buf, alignment, new_len, ra);
     }

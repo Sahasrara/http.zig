@@ -114,7 +114,7 @@ pub fn Blocking(comptime S: type, comptime WSH: type) type {
             }
 
             return .{
-                .mut = .{},
+                .mut = .init,
                 .server = server,
                 .config = config,
                 .connections = .{},
@@ -267,7 +267,7 @@ pub fn Blocking(comptime S: type, comptime WSH: type) type {
             var is_first = true;
             var reader = stream.reader(&.{}); // Request.State does its own buffering
             while (true) {
-                const done = conn.req_state.parse(conn, reader.interface()) catch |err| {
+                const done = conn.req_state.parse(conn, &reader.interface) catch |err| {
                     switch (err) {
                         error.ReadFailed => {
                             if (reader.err) |e| {
